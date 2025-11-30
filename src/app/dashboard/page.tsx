@@ -10,20 +10,43 @@ import {
   CardContent,
   CircularProgress,
   Alert,
+  Avatar,
+  Button,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@mui/material';
 import {
   People,
   VideoLibrary,
   School,
   TrendingUp,
+  CheckCircle,
+  Pending,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+
+interface PendingUser {
+  id: number;
+  firebase_uid: string;
+  email: string;
+  display_name: string;
+  photo_url: string;
+  created_at: string;
+  is_approved_for_kuppies: boolean;
+  kuppi_count: number;
+}
 
 interface Stats {
   users: number;
   modules: number;
   kuppis: number;
   tutors: number;
+  pendingUsers: PendingUser[];
 }
 
 interface StatCardProps {
@@ -72,6 +95,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [approving, setApproving] = useState<number | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -89,6 +113,28 @@ export default function DashboardPage() {
       toast.error('Failed to load statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveUser = async (userId: number) => {
+    setApproving(userId);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, is_approved_for_kuppies: true }),
+      });
+
+      if (!response.ok) throw new Error('Failed to approve user');
+      
+      toast.success('User approved for kuppies!');
+      // Refresh stats to update the pending users list
+      fetchStats();
+    } catch (err) {
+      console.error('Error approving user:', err);
+      toast.error('Failed to approve user');
+    } finally {
+      setApproving(null);
     }
   };
 
@@ -224,6 +270,85 @@ export default function DashboardPage() {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Pending Users for Kuppi Approval */}
+      {stats?.pendingUsers && stats.pendingUsers.length > 0 && (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 5, mb: 3 }}>
+            <Pending sx={{ color: 'warning.main', fontSize: 28 }} />
+            <Typography variant="h5" fontWeight={600}>
+              Pending Approval
+            </Typography>
+            <Chip 
+              label={`${stats.pendingUsers.length} users`} 
+              color="warning" 
+              size="small" 
+            />
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            These users have added kuppis but are not yet approved. Review and approve them to allow their content.
+          </Typography>
+          <TableContainer component={Paper} sx={{ mb: 3 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>User</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell align="center">Kuppis Added</TableCell>
+                  <TableCell align="center">Joined</TableCell>
+                  <TableCell align="center">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {stats.pendingUsers.map((user) => (
+                  <TableRow key={user.id} hover>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar src={user.photo_url} alt={user.display_name}>
+                          {user.display_name?.charAt(0).toUpperCase()}
+                        </Avatar>
+                        <Typography variant="body2" fontWeight={500}>
+                          {user.display_name || 'Unknown User'}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {user.email}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip 
+                        label={user.kuppi_count} 
+                        size="small" 
+                        color="info"
+                        icon={<VideoLibrary sx={{ fontSize: 16 }} />}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography variant="body2" color="text.secondary">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        startIcon={approving === user.id ? <CircularProgress size={16} color="inherit" /> : <CheckCircle />}
+                        onClick={() => handleApproveUser(user.id)}
+                        disabled={approving === user.id}
+                      >
+                        {approving === user.id ? 'Approving...' : 'Approve'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
+      )}
     </Box>
   );
 }

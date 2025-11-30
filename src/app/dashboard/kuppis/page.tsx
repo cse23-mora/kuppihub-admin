@@ -30,8 +30,6 @@ import {
   VisibilityOff,
   Refresh,
   OpenInNew,
-  CheckCircle,
-  Cancel,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 
@@ -48,7 +46,7 @@ interface Kuppi {
   created_at: string;
   language_code: string;
   is_hidden: boolean;
-  is_approved: boolean;
+  added_by_user_id: number | null;
   module_name?: string;
   student_name?: string;
 }
@@ -65,7 +63,7 @@ export default function KuppisPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterModule, setFilterModule] = useState<number | ''>('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterVisibility, setFilterVisibility] = useState<string>('all');
   
   const [selectedKuppi, setSelectedKuppi] = useState<Kuppi | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -115,23 +113,7 @@ export default function KuppisPage() {
     }
   };
 
-  const handleApprove = async (kuppi: Kuppi, approve: boolean) => {
-    try {
-      const response = await fetch(`/api/kuppis/${kuppi.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_approved: approve }),
-      });
 
-      if (!response.ok) throw new Error('Failed to update kuppi');
-
-      toast.success(approve ? 'Kuppi approved' : 'Kuppi rejected');
-      fetchData();
-    } catch (error) {
-      console.error('Error updating kuppi:', error);
-      toast.error('Failed to update kuppi');
-    }
-  };
 
   const handleEdit = async () => {
     if (!selectedKuppi) return;
@@ -188,12 +170,11 @@ export default function KuppisPage() {
       kuppi.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       kuppi.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesModule = filterModule === '' || kuppi.module_id === filterModule;
-    const matchesStatus =
-      filterStatus === 'all' ||
-      (filterStatus === 'approved' && kuppi.is_approved) ||
-      (filterStatus === 'pending' && !kuppi.is_approved) ||
-      (filterStatus === 'hidden' && kuppi.is_hidden);
-    return matchesSearch && matchesModule && matchesStatus;
+    const matchesVisibility =
+      filterVisibility === 'all' ||
+      (filterVisibility === 'visible' && !kuppi.is_hidden) ||
+      (filterVisibility === 'hidden' && kuppi.is_hidden);
+    return matchesSearch && matchesModule && matchesVisibility;
   });
 
   const columns: GridColDef[] = [
@@ -218,18 +199,6 @@ export default function KuppisPage() {
           label={params.value === 'si' ? 'Sinhala' : params.value === 'en' ? 'English' : params.value}
           size="small"
           variant="outlined"
-        />
-      ),
-    },
-    {
-      field: 'is_approved',
-      headerName: 'Status',
-      width: 100,
-      renderCell: (params: GridRenderCellParams) => (
-        <Chip
-          label={params.value ? 'Approved' : 'Pending'}
-          size="small"
-          color={params.value ? 'success' : 'warning'}
         />
       ),
     },
@@ -286,16 +255,6 @@ export default function KuppisPage() {
           >
             {params.row.is_hidden ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
           </IconButton>
-          {!params.row.is_approved && (
-            <IconButton
-              size="small"
-              color="success"
-              onClick={() => handleApprove(params.row, true)}
-              title="Approve"
-            >
-              <CheckCircle fontSize="small" />
-            </IconButton>
-          )}
           <IconButton
             size="small"
             color="error"
@@ -360,15 +319,14 @@ export default function KuppisPage() {
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Status</InputLabel>
+            <InputLabel>Visibility</InputLabel>
             <Select
-              value={filterStatus}
-              label="Status"
-              onChange={(e: SelectChangeEvent) => setFilterStatus(e.target.value)}
+              value={filterVisibility}
+              label="Visibility"
+              onChange={(e: SelectChangeEvent) => setFilterVisibility(e.target.value)}
             >
               <MenuItem value="all">All</MenuItem>
-              <MenuItem value="approved">Approved</MenuItem>
-              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="visible">Visible</MenuItem>
               <MenuItem value="hidden">Hidden</MenuItem>
             </Select>
           </FormControl>

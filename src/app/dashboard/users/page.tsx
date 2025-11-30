@@ -23,8 +23,8 @@ import {
   Search,
   Edit,
   Delete,
-  Block,
   CheckCircle,
+  Cancel,
   Refresh,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
@@ -36,7 +36,7 @@ interface User {
   display_name: string;
   photo_url: string;
   is_verified: boolean;
-  is_blocked: boolean;
+  is_approved_for_kuppies: boolean;
   auth_provider: string;
   created_at: string;
   updated_at: string;
@@ -69,17 +69,17 @@ export default function UsersPage() {
     }
   };
 
-  const handleToggleBlock = async (user: User) => {
+  const handleToggleApproval = async (user: User) => {
     try {
       const response = await fetch(`/api/users/${user.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_blocked: !user.is_blocked }),
+        body: JSON.stringify({ is_approved_for_kuppies: !user.is_approved_for_kuppies }),
       });
       
       if (!response.ok) throw new Error('Failed to update user');
       
-      toast.success(user.is_blocked ? 'User unblocked' : 'User blocked');
+      toast.success(user.is_approved_for_kuppies ? 'User approval revoked' : 'User approved for kuppies');
       fetchUsers();
     } catch (error) {
       console.error('Error updating user:', error);
@@ -175,14 +175,14 @@ export default function UsersPage() {
       ),
     },
     {
-      field: 'is_blocked',
-      headerName: 'Status',
-      width: 100,
+      field: 'is_approved_for_kuppies',
+      headerName: 'Kuppi Access',
+      width: 120,
       renderCell: (params: GridRenderCellParams) => (
         <Chip
-          label={params.value ? 'Blocked' : 'Active'}
+          label={params.value ? 'Approved' : 'Not Approved'}
           size="small"
-          color={params.value ? 'error' : 'success'}
+          color={params.value ? 'success' : 'default'}
         />
       ),
     },
@@ -211,10 +211,11 @@ export default function UsersPage() {
           </IconButton>
           <IconButton
             size="small"
-            onClick={() => handleToggleBlock(params.row)}
-            color={params.row.is_blocked ? 'success' : 'warning'}
+            onClick={() => handleToggleApproval(params.row)}
+            color={params.row.is_approved_for_kuppies ? 'warning' : 'success'}
+            title={params.row.is_approved_for_kuppies ? 'Revoke Kuppi Access' : 'Approve for Kuppies'}
           >
-            {params.row.is_blocked ? <CheckCircle fontSize="small" /> : <Block fontSize="small" />}
+            {params.row.is_approved_for_kuppies ? <Cancel fontSize="small" /> : <CheckCircle fontSize="small" />}
           </IconButton>
           <IconButton
             size="small"
