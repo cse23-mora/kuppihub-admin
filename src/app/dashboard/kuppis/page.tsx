@@ -30,6 +30,8 @@ import {
   VisibilityOff,
   Refresh,
   OpenInNew,
+  CheckCircle,
+  Cancel,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 
@@ -46,9 +48,12 @@ interface Kuppi {
   created_at: string;
   language_code: string;
   is_hidden: boolean;
+  is_approved: boolean;
   added_by_user_id: number | null;
   module_name?: string;
   student_name?: string;
+  user_email?: string;
+  user_display_name?: string;
 }
 
 interface Module {
@@ -64,6 +69,7 @@ export default function KuppisPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterModule, setFilterModule] = useState<number | ''>('');
   const [filterVisibility, setFilterVisibility] = useState<string>('all');
+  const [filterApproval, setFilterApproval] = useState<string>('all');
   
   const [selectedKuppi, setSelectedKuppi] = useState<Kuppi | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -106,6 +112,24 @@ export default function KuppisPage() {
       if (!response.ok) throw new Error('Failed to update kuppi');
 
       toast.success(kuppi.is_hidden ? 'Kuppi is now visible' : 'Kuppi is now hidden');
+      fetchData();
+    } catch (error) {
+      console.error('Error updating kuppi:', error);
+      toast.error('Failed to update kuppi');
+    }
+  };
+
+  const handleToggleApproval = async (kuppi: Kuppi) => {
+    try {
+      const response = await fetch(`/api/kuppis/${kuppi.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_approved: !kuppi.is_approved }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update kuppi');
+
+      toast.success(kuppi.is_approved ? 'Kuppi unapproved' : 'Kuppi approved!');
       fetchData();
     } catch (error) {
       console.error('Error updating kuppi:', error);
@@ -174,7 +198,11 @@ export default function KuppisPage() {
       filterVisibility === 'all' ||
       (filterVisibility === 'visible' && !kuppi.is_hidden) ||
       (filterVisibility === 'hidden' && kuppi.is_hidden);
-    return matchesSearch && matchesModule && matchesVisibility;
+    const matchesApproval =
+      filterApproval === 'all' ||
+      (filterApproval === 'approved' && kuppi.is_approved) ||
+      (filterApproval === 'pending' && !kuppi.is_approved);
+    return matchesSearch && matchesModule && matchesVisibility && matchesApproval;
   });
 
   const columns: GridColDef[] = [
@@ -215,6 +243,19 @@ export default function KuppisPage() {
       ),
     },
     {
+      field: 'is_approved',
+      headerName: 'Approval',
+      width: 110,
+      renderCell: (params: GridRenderCellParams) => (
+        <Chip
+          label={params.value ? 'Approved' : 'Pending'}
+          size="small"
+          color={params.value ? 'success' : 'warning'}
+          icon={params.value ? <CheckCircle sx={{ fontSize: 16 }} /> : <Cancel sx={{ fontSize: 16 }} />}
+        />
+      ),
+    },
+    {
       field: 'created_at',
       headerName: 'Created',
       width: 110,
@@ -224,7 +265,7 @@ export default function KuppisPage() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 200,
+      width: 240,
       sortable: false,
       renderCell: (params: GridRenderCellParams) => (
         <Box>
@@ -247,6 +288,14 @@ export default function KuppisPage() {
             title="Edit"
           >
             <Edit fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            color={params.row.is_approved ? 'default' : 'success'}
+            onClick={() => handleToggleApproval(params.row)}
+            title={params.row.is_approved ? 'Unapprove' : 'Approve'}
+          >
+            {params.row.is_approved ? <Cancel fontSize="small" /> : <CheckCircle fontSize="small" />}
           </IconButton>
           <IconButton
             size="small"
@@ -328,6 +377,18 @@ export default function KuppisPage() {
               <MenuItem value="all">All</MenuItem>
               <MenuItem value="visible">Visible</MenuItem>
               <MenuItem value="hidden">Hidden</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Approval</InputLabel>
+            <Select
+              value={filterApproval}
+              label="Approval"
+              onChange={(e: SelectChangeEvent) => setFilterApproval(e.target.value)}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="approved">Approved</MenuItem>
+              <MenuItem value="pending">Pending</MenuItem>
             </Select>
           </FormControl>
         </Box>

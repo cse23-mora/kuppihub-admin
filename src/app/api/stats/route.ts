@@ -4,11 +4,12 @@ import supabase from '@/lib/supabase';
 export async function GET() {
   try {
     // Get counts from different tables
-    const [usersRes, modulesRes, kuppisRes, tutorsRes] = await Promise.all([
+    const [usersRes, modulesRes, kuppisRes, tutorsRes, pendingKuppisRes] = await Promise.all([
       supabase.from('users').select('id', { count: 'exact', head: true }),
       supabase.from('modules').select('id', { count: 'exact', head: true }),
       supabase.from('videos').select('id', { count: 'exact', head: true }).eq('is_kuppi', true),
       supabase.from('students').select('id', { count: 'exact', head: true }),
+      supabase.from('videos').select('id', { count: 'exact', head: true }).eq('is_approved', false),
     ]);
 
     // Get users who have added kuppis but are not approved yet
@@ -45,12 +46,46 @@ export async function GET() {
       }
     }
 
+    // Get pending kuppis (not approved)
+    const { data: pendingKuppisData } = await supabase
+      .from('videos')
+      .select(`
+        id,
+        title,
+        created_at,
+        added_by_user_id,
+        module_id,
+        modules:module_id (code, name)
+      `)
+      .eq('is_approved', false)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Get user info for pending kuppis
+    let pendingKuppis: any[] = [];
+    if (pendingKuppisData && pendingKuppisData.length > 0) {
+      const userIds = [...new Set(pendingKuppisData.map(k => k.added_by_user_id).filter(Boolean))];
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, email, display_name, photo_url')
+        .in('id', userIds.length > 0 ? userIds : [0]);
+
+      const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
+      
+      pendingKuppis = pendingKuppisData.map(k => ({
+        ...k,
+        user: usersMap.get(k.added_by_user_id) || null,
+      }));
+    }
+
     return NextResponse.json({
       users: usersRes.count || 0,
       modules: modulesRes.count || 0,
       kuppis: kuppisRes.count || 0,
       tutors: tutorsRes.count || 0,
+      pendingKuppisCount: pendingKuppisRes.count || 0,
       pendingUsers,
+      pendingKuppis,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);

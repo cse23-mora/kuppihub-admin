@@ -41,12 +41,24 @@ interface PendingUser {
   kuppi_count: number;
 }
 
+interface PendingKuppi {
+  id: number;
+  title: string;
+  created_at: string;
+  added_by_user_id: number;
+  module_id: number;
+  modules: { code: string; name: string } | null;
+  user: { id: number; email: string; display_name: string; photo_url: string } | null;
+}
+
 interface Stats {
   users: number;
   modules: number;
   kuppis: number;
   tutors: number;
+  pendingKuppisCount: number;
   pendingUsers: PendingUser[];
+  pendingKuppis: PendingKuppi[];
 }
 
 interface StatCardProps {
@@ -95,7 +107,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [approving, setApproving] = useState<number | null>(null);
+  const [approvingUser, setApprovingUser] = useState<number | null>(null);
+  const [approvingKuppi, setApprovingKuppi] = useState<number | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -117,7 +130,7 @@ export default function DashboardPage() {
   };
 
   const handleApproveUser = async (userId: number) => {
-    setApproving(userId);
+    setApprovingUser(userId);
     try {
       const response = await fetch('/api/users', {
         method: 'PUT',
@@ -127,14 +140,36 @@ export default function DashboardPage() {
 
       if (!response.ok) throw new Error('Failed to approve user');
       
-      toast.success('User approved for kuppies!');
+      toast.success('User approved for kuppies! All their kuppis are now visible.');
       // Refresh stats to update the pending users list
       fetchStats();
     } catch (err) {
       console.error('Error approving user:', err);
       toast.error('Failed to approve user');
     } finally {
-      setApproving(null);
+      setApprovingUser(null);
+    }
+  };
+
+  const handleApproveKuppi = async (kuppiId: number) => {
+    setApprovingKuppi(kuppiId);
+    try {
+      const response = await fetch(`/api/kuppis/${kuppiId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_approved: true }),
+      });
+
+      if (!response.ok) throw new Error('Failed to approve kuppi');
+      
+      toast.success('Kuppi approved!');
+      // Refresh stats to update the pending kuppis list
+      fetchStats();
+    } catch (err) {
+      console.error('Error approving kuppi:', err);
+      toast.error('Failed to approve kuppi');
+    } finally {
+      setApprovingKuppi(null);
     }
   };
 
@@ -164,7 +199,7 @@ export default function DashboardPage() {
       </Typography>
 
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <StatCard
             title="Total Users"
             value={stats?.users || 0}
@@ -172,7 +207,7 @@ export default function DashboardPage() {
             color="#6366f1"
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <StatCard
             title="Total Modules"
             value={stats?.modules || 0}
@@ -180,7 +215,7 @@ export default function DashboardPage() {
             color="#10b981"
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <StatCard
             title="Total Kuppis"
             value={stats?.kuppis || 0}
@@ -188,7 +223,15 @@ export default function DashboardPage() {
             color="#f59e0b"
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <StatCard
+            title="Pending Kuppis"
+            value={stats?.pendingKuppisCount || 0}
+            icon={<Pending sx={{ fontSize: 28 }} />}
+            color="#ef4444"
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <StatCard
             title="Active Tutors"
             value={stats?.tutors || 0}
@@ -335,11 +378,11 @@ export default function DashboardPage() {
                         variant="contained"
                         color="success"
                         size="small"
-                        startIcon={approving === user.id ? <CircularProgress size={16} color="inherit" /> : <CheckCircle />}
+                        startIcon={approvingUser === user.id ? <CircularProgress size={16} color="inherit" /> : <CheckCircle />}
                         onClick={() => handleApproveUser(user.id)}
-                        disabled={approving === user.id}
+                        disabled={approvingUser === user.id}
                       >
-                        {approving === user.id ? 'Approving...' : 'Approve'}
+                        {approvingUser === user.id ? 'Approving...' : 'Approve'}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -347,6 +390,98 @@ export default function DashboardPage() {
               </TableBody>
             </Table>
           </TableContainer>
+        </>
+      )}
+
+      {/* Pending Kuppis for Approval */}
+      {stats?.pendingKuppis && stats.pendingKuppis.length > 0 && (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 5, mb: 3 }}>
+            <VideoLibrary sx={{ color: 'error.main', fontSize: 28 }} />
+            <Typography variant="h5" fontWeight={600}>
+              Pending Kuppis
+            </Typography>
+            <Chip 
+              label={`${stats.pendingKuppisCount} total`} 
+              color="error" 
+              size="small" 
+            />
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            These kuppis need approval before they appear on the platform. Approve individual kuppis or approve the user to auto-approve all their content.
+          </Typography>
+          <TableContainer component={Paper} sx={{ mb: 3 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Kuppi Title</TableCell>
+                  <TableCell>Module</TableCell>
+                  <TableCell>Added By</TableCell>
+                  <TableCell align="center">Created</TableCell>
+                  <TableCell align="center">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {stats.pendingKuppis.map((kuppi) => (
+                  <TableRow key={kuppi.id} hover>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={500}>
+                        {kuppi.title || 'Untitled'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={kuppi.modules ? `${kuppi.modules.code}` : 'Unknown'} 
+                        size="small" 
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {kuppi.user ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Avatar src={kuppi.user.photo_url} sx={{ width: 24, height: 24 }}>
+                            {kuppi.user.display_name?.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Typography variant="body2" color="text.secondary">
+                            {kuppi.user.display_name || kuppi.user.email}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">Unknown</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography variant="body2" color="text.secondary">
+                        {new Date(kuppi.created_at).toLocaleDateString()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        startIcon={approvingKuppi === kuppi.id ? <CircularProgress size={16} color="inherit" /> : <CheckCircle />}
+                        onClick={() => handleApproveKuppi(kuppi.id)}
+                        disabled={approvingKuppi === kuppi.id}
+                      >
+                        {approvingKuppi === kuppi.id ? 'Approving...' : 'Approve'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {stats.pendingKuppisCount > 10 && (
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <Button 
+                variant="outlined" 
+                onClick={() => window.location.href = '/dashboard/kuppis?filter=pending'}
+              >
+                View All {stats.pendingKuppisCount} Pending Kuppis
+              </Button>
+            </Box>
+          )}
         </>
       )}
     </Box>
