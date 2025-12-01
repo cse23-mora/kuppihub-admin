@@ -31,6 +31,7 @@ import {
   Refresh,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import { authFetch } from '@/lib/api';
 
 interface Module {
   id: number;
@@ -97,11 +98,11 @@ export default function ModulesPage() {
     try {
       setLoading(true);
       const [modulesRes, facultiesRes, departmentsRes, semestersRes, assignmentsRes] = await Promise.all([
-        fetch('/api/modules'),
-        fetch('/api/faculties'),
-        fetch('/api/departments'),
-        fetch('/api/semesters'),
-        fetch('/api/module-assignments'),
+        authFetch('/api/modules'),
+        authFetch('/api/faculties'),
+        authFetch('/api/departments'),
+        authFetch('/api/semesters'),
+        authFetch('/api/module-assignments'),
       ]);
 
       const modulesData = await modulesRes.json();
@@ -125,7 +126,7 @@ export default function ModulesPage() {
 
   const handleAddModule = async () => {
     try {
-      const response = await fetch('/api/modules', {
+      const response = await authFetch('/api/modules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newModule),
@@ -147,7 +148,7 @@ export default function ModulesPage() {
     if (!selectedModule) return;
 
     try {
-      const response = await fetch(`/api/modules/${selectedModule.id}`, {
+      const response = await authFetch(`/api/modules/${selectedModule.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(selectedModule),
@@ -169,7 +170,7 @@ export default function ModulesPage() {
     if (!selectedModule) return;
 
     try {
-      const response = await fetch(`/api/modules/${selectedModule.id}`, {
+      const response = await authFetch(`/api/modules/${selectedModule.id}`, {
         method: 'DELETE',
       });
 
@@ -187,7 +188,7 @@ export default function ModulesPage() {
 
   const handleAssignModule = async () => {
     try {
-      const response = await fetch('/api/module-assignments', {
+      const response = await authFetch('/api/module-assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(assignForm),

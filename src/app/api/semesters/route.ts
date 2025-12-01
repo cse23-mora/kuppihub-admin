@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { validateRequest, sanitizeString } from '@/lib/validation';
 
-// GET - Fetch all semesters
-export async function GET() {
+// GET - Fetch all semesters (protected)
+export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { data, error } = await supabase
       .from('semesters')
       .select('*')
@@ -18,19 +30,35 @@ export async function GET() {
   }
 }
 
-// POST - Create new semester
+// POST - Create new semester (protected)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name } = body;
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request, 20);
+    if (rateLimitResponse) return rateLimitResponse;
 
-    if (!name) {
-      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
     }
+
+    const body = await request.json();
+
+    // Validate request
+    const { valid, errors, sanitizedData } = validateRequest(body, {
+      name: { name: 'Semester Name', required: true, type: 'string', minLength: 1, maxLength: 50 },
+    });
+
+    if (!valid) {
+      return NextResponse.json({ error: errors.join(', ') }, { status: 400 });
+    }
+
+    const { name } = sanitizedData!;
 
     const { data, error } = await supabase
       .from('semesters')
-      .insert({ name })
+      .insert({ name: sanitizeString(name) })
       .select()
       .single();
 

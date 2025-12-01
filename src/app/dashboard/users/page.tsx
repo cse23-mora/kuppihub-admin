@@ -28,6 +28,7 @@ import {
   Refresh,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import { authFetch } from '@/lib/api';
 
 interface User {
   id: number;
@@ -57,7 +58,7 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/users');
+      const response = await authFetch('/api/users');
       if (!response.ok) throw new Error('Failed to fetch users');
       const data = await response.json();
       setUsers(data.users || []);
@@ -71,7 +72,7 @@ export default function UsersPage() {
 
   const handleToggleApproval = async (user: User) => {
     try {
-      const response = await fetch(`/api/users/${user.id}`, {
+      const response = await authFetch(`/api/users/${user.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_approved_for_kuppies: !user.is_approved_for_kuppies }),
@@ -91,7 +92,7 @@ export default function UsersPage() {
     if (!selectedUser) return;
     
     try {
-      const response = await fetch(`/api/users/${selectedUser.id}`, {
+      const response = await authFetch(`/api/users/${selectedUser.id}`, {
         method: 'DELETE',
       });
       
@@ -111,7 +112,7 @@ export default function UsersPage() {
     if (!selectedUser) return;
     
     try {
-      const response = await fetch(`/api/users/${selectedUser.id}`, {
+      const response = await authFetch(`/api/users/${selectedUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

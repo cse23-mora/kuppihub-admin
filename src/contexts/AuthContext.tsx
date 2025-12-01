@@ -4,7 +4,8 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { 
   User, 
   onAuthStateChanged, 
-  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult,
   signOut as firebaseSignOut 
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
@@ -23,6 +24,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   error: string | null;
+  getIdToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,6 +50,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Handle redirect result when returning from Google sign-in
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const isAdmin = checkIsAdmin(result.user.email);
+          if (!isAdmin) {
+            await firebaseSignOut(auth);
+            setError('Access denied. You are not authorized as an admin.');
+            setUser(null);
+          }
+        }
+      } catch (error) {
+        console.error('Redirect result error:', error);
+        setError('Failed to sign in. Please try again.');
+      }
+    };
+
+    handleRedirectResult();
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: User | null) => {
       if (firebaseUser) {
         const isAdmin = checkIsAdmin(firebaseUser.email);
@@ -80,18 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       setLoading(true);
-      const result = await signInWithPopup(auth, googleProvider);
-      
-      const isAdmin = checkIsAdmin(result.user.email);
-      if (!isAdmin) {
-        await firebaseSignOut(auth);
-        setError('Access denied. You are not authorized as an admin.');
-        setUser(null);
-      }
+      await signInWithRedirect(auth, googleProvider);
+      // The result will be handled in the useEffect when redirected back
     } catch (error: unknown) {
       console.error('Sign in error:', error);
       setError('Failed to sign in. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -106,8 +121,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const getIdToken = async (): Promise<string | null> => {
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        return await currentUser.getIdToken();
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting ID token:', error);
+      return null;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut, error }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut, error, getIdToken }}>
       {children}
     </AuthContext.Provider>
   );

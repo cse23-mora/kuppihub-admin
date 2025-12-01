@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { validateRequest, sanitizeString, PATTERNS } from '@/lib/validation';
 
-// GET - Fetch all kuppis (videos with is_kuppi = true)
-export async function GET() {
+// GET - Fetch all kuppis (protected)
+export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { data, error } = await supabase
       .from('videos')
       .select(`
@@ -22,10 +34,37 @@ export async function GET() {
   }
 }
 
-// POST - Create new kuppi
+// POST - Create new kuppi (protected)
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting (stricter for creation)
+    const rateLimitResponse = rateLimit(request, 20);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const body = await request.json();
+
+    // Validate request
+    const { valid, errors, sanitizedData } = validateRequest(body, {
+      module_id: { name: 'Module ID', required: true, type: 'string', pattern: PATTERNS.UUID },
+      title: { name: 'Title', required: true, type: 'string', minLength: 3, maxLength: 200 },
+      description: { name: 'Description', type: 'string', maxLength: 2000 },
+      youtube_links: { name: 'YouTube Links', required: true, type: 'array', minLength: 1 },
+      telegram_links: { name: 'Telegram Links', type: 'array' },
+      material_urls: { name: 'Material URLs', type: 'array' },
+      student_id: { name: 'Student ID', type: 'string', pattern: PATTERNS.UUID },
+      language_code: { name: 'Language Code', type: 'string', enum: ['si', 'en', 'ta'] },
+    });
+
+    if (!valid) {
+      return NextResponse.json({ error: errors.join(', ') }, { status: 400 });
+    }
+
     const {
       module_id,
       title,
@@ -35,21 +74,14 @@ export async function POST(request: NextRequest) {
       material_urls,
       student_id,
       language_code,
-    } = body;
-
-    if (!module_id || !title || !youtube_links) {
-      return NextResponse.json(
-        { error: 'module_id, title, and youtube_links are required' },
-        { status: 400 }
-      );
-    }
+    } = sanitizedData!;
 
     const { data, error } = await supabase
       .from('videos')
       .insert({
         module_id,
-        title,
-        description,
+        title: sanitizeString(title),
+        description: description ? sanitizeString(description) : null,
         youtube_links,
         telegram_links,
         material_urls,

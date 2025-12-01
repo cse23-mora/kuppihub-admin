@@ -38,6 +38,7 @@ import {
   School,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import { authFetch } from '@/lib/api';
 
 interface HierarchyData {
   [facultyKey: string]: {
@@ -90,8 +91,8 @@ export default function HierarchyPage() {
     try {
       setLoading(true);
       const [hierarchyRes, modulesRes] = await Promise.all([
-        fetch('/api/hierarchy'),
-        fetch('/api/modules'),
+        authFetch('/api/hierarchy'),
+        authFetch('/api/modules'),
       ]);
 
       const hierarchyData = await hierarchyRes.json();
@@ -112,7 +113,7 @@ export default function HierarchyPage() {
 
     try {
       setSaving(true);
-      const response = await fetch('/api/hierarchy', {
+      const response = await authFetch('/api/hierarchy', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: hierarchy }),

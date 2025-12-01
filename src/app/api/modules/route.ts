@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { validateRequest, sanitizeString } from '@/lib/validation';
 
-// GET - Fetch all modules
-export async function GET() {
+// GET - Fetch all modules (protected)
+export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { data, error } = await supabase
       .from('modules')
       .select('*')
@@ -18,22 +30,41 @@ export async function GET() {
   }
 }
 
-// POST - Create new module
+// POST - Create new module (protected)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { code, name, description } = body;
+    // Rate limiting (stricter for creation)
+    const rateLimitResponse = rateLimit(request, 20);
+    if (rateLimitResponse) return rateLimitResponse;
 
-    if (!code || !name) {
-      return NextResponse.json(
-        { error: 'Code and name are required' },
-        { status: 400 }
-      );
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
     }
+
+    const body = await request.json();
+
+    // Validate request
+    const { valid, errors, sanitizedData } = validateRequest(body, {
+      code: { name: 'Module Code', required: true, type: 'string', minLength: 2, maxLength: 20 },
+      name: { name: 'Module Name', required: true, type: 'string', minLength: 3, maxLength: 200 },
+      description: { name: 'Description', type: 'string', maxLength: 1000 },
+    });
+
+    if (!valid) {
+      return NextResponse.json({ error: errors.join(', ') }, { status: 400 });
+    }
+
+    const { code, name, description } = sanitizedData!;
 
     const { data, error } = await supabase
       .from('modules')
-      .insert({ code, name, description })
+      .insert({ 
+        code: sanitizeString(code), 
+        name: sanitizeString(name), 
+        description: description ? sanitizeString(description) : null 
+      })
       .select()
       .single();
 

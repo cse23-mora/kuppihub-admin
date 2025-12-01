@@ -1,13 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { isValidUUID, sanitizeObject } from '@/lib/validation';
 
-// GET - Fetch single kuppi
+// GET - Fetch single kuppi (protected)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid kuppi ID format' }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('videos')
       .select(`
@@ -27,18 +45,52 @@ export async function GET(
   }
 }
 
-// PATCH - Update kuppi
+// PATCH - Update kuppi (protected)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting (stricter for writes)
+    const rateLimitResponse = rateLimit(request, 30);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid kuppi ID format' }, { status: 400 });
+    }
+
     const body = await request.json();
+
+    // Sanitize input
+    const sanitizedBody = sanitizeObject(body);
+
+    // Whitelist allowed fields to update
+    const allowedFields = [
+      'title', 'description', 'youtube_links', 'telegram_links',
+      'material_urls', 'is_approved', 'is_hidden', 'language_code'
+    ];
+    const filteredBody: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (sanitizedBody[field] !== undefined) {
+        filteredBody[field] = sanitizedBody[field];
+      }
+    }
 
     const { data, error } = await supabase
       .from('videos')
-      .update(body)
+      .update({
+        ...filteredBody,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
@@ -52,13 +104,29 @@ export async function PATCH(
   }
 }
 
-// DELETE - Delete kuppi
+// DELETE - Delete kuppi (protected)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting (very strict for deletes)
+    const rateLimitResponse = rateLimit(request, 10);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid kuppi ID format' }, { status: 400 });
+    }
+
     const { error } = await supabase
       .from('videos')
       .delete()

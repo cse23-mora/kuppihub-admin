@@ -29,6 +29,7 @@ import {
   Pending,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import { authFetch } from '@/lib/api';
 
 interface PendingUser {
   id: number;
@@ -116,7 +117,7 @@ export default function DashboardPage() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/stats');
+      const response = await authFetch('/api/stats');
       if (!response.ok) throw new Error('Failed to fetch stats');
       const data = await response.json();
       setStats(data);
@@ -132,9 +133,11 @@ export default function DashboardPage() {
   const handleApproveUser = async (userId: number) => {
     setApprovingUser(userId);
     try {
-      const response = await fetch('/api/users', {
+      const response = await authFetch('/api/users', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ id: userId, is_approved_for_kuppies: true }),
       });
 
@@ -154,9 +157,11 @@ export default function DashboardPage() {
   const handleApproveKuppi = async (kuppiId: number) => {
     setApprovingKuppi(kuppiId);
     try {
-      const response = await fetch(`/api/kuppis/${kuppiId}`, {
+      const response = await authFetch(`/api/kuppis/${kuppiId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ is_approved: true }),
       });
 

@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { sanitizeObject } from '@/lib/validation';
 
-// GET - Fetch hierarchy data
-export async function GET() {
+// GET - Fetch hierarchy data (protected)
+export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { data, error } = await supabase
       .from('faculty_hierarchy')
       .select('data')
@@ -20,15 +32,28 @@ export async function GET() {
   }
 }
 
-// PUT - Update hierarchy data
+// PUT - Update hierarchy data (protected)
 export async function PUT(request: NextRequest) {
   try {
+    // Rate limiting (stricter for writes)
+    const rateLimitResponse = rateLimit(request, 20);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const body = await request.json();
     const { data: hierarchyData } = body;
 
     if (!hierarchyData) {
       return NextResponse.json({ error: 'Hierarchy data is required' }, { status: 400 });
     }
+
+    // Sanitize the hierarchy data
+    const sanitizedHierarchyData = sanitizeObject(hierarchyData);
 
     // Get the current hierarchy record ID
     const { data: current } = await supabase
@@ -43,7 +68,7 @@ export async function PUT(request: NextRequest) {
       const { data, error } = await supabase
         .from('faculty_hierarchy')
         .update({ 
-          data: hierarchyData,
+          data: sanitizedHierarchyData,
           updated_at: new Date().toISOString()
         })
         .eq('id', current.id)
@@ -57,7 +82,7 @@ export async function PUT(request: NextRequest) {
       // Insert new record
       const { data, error } = await supabase
         .from('faculty_hierarchy')
-        .insert({ data: hierarchyData })
+        .insert({ data: sanitizedHierarchyData })
         .select()
         .single();
 

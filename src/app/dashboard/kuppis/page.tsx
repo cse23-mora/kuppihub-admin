@@ -34,6 +34,7 @@ import {
   Cancel,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
+import { authFetch } from '@/lib/api';
 
 interface Kuppi {
   id: number;
@@ -84,8 +85,8 @@ export default function KuppisPage() {
     try {
       setLoading(true);
       const [kuppisRes, modulesRes] = await Promise.all([
-        fetch('/api/kuppis'),
-        fetch('/api/modules'),
+        authFetch('/api/kuppis'),
+        authFetch('/api/modules'),
       ]);
 
       const kuppisData = await kuppisRes.json();
@@ -103,7 +104,7 @@ export default function KuppisPage() {
 
   const handleToggleVisibility = async (kuppi: Kuppi) => {
     try {
-      const response = await fetch(`/api/kuppis/${kuppi.id}`, {
+      const response = await authFetch(`/api/kuppis/${kuppi.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_hidden: !kuppi.is_hidden }),
@@ -121,7 +122,7 @@ export default function KuppisPage() {
 
   const handleToggleApproval = async (kuppi: Kuppi) => {
     try {
-      const response = await fetch(`/api/kuppis/${kuppi.id}`, {
+      const response = await authFetch(`/api/kuppis/${kuppi.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_approved: !kuppi.is_approved }),
@@ -143,7 +144,7 @@ export default function KuppisPage() {
     if (!selectedKuppi) return;
 
     try {
-      const response = await fetch(`/api/kuppis/${selectedKuppi.id}`, {
+      const response = await authFetch(`/api/kuppis/${selectedKuppi.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -168,7 +169,7 @@ export default function KuppisPage() {
     if (!selectedKuppi) return;
 
     try {
-      const response = await fetch(`/api/kuppis/${selectedKuppi.id}`, {
+      const response = await authFetch(`/api/kuppis/${selectedKuppi.id}`, {
         method: 'DELETE',
       });
 

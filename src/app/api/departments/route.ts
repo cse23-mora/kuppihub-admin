@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { validateRequest, sanitizeString, PATTERNS } from '@/lib/validation';
 
-// GET - Fetch all departments
-export async function GET() {
+// GET - Fetch all departments (protected)
+export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { data, error } = await supabase
       .from('departments')
       .select('*')
@@ -18,22 +30,36 @@ export async function GET() {
   }
 }
 
-// POST - Create new department
+// POST - Create new department (protected)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, faculty_id } = body;
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request, 20);
+    if (rateLimitResponse) return rateLimitResponse;
 
-    if (!name || !faculty_id) {
-      return NextResponse.json(
-        { error: 'Name and faculty_id are required' },
-        { status: 400 }
-      );
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
     }
+
+    const body = await request.json();
+
+    // Validate request
+    const { valid, errors, sanitizedData } = validateRequest(body, {
+      name: { name: 'Department Name', required: true, type: 'string', minLength: 2, maxLength: 100 },
+      faculty_id: { name: 'Faculty ID', required: true, type: 'string', pattern: PATTERNS.UUID },
+    });
+
+    if (!valid) {
+      return NextResponse.json({ error: errors.join(', ') }, { status: 400 });
+    }
+
+    const { name, faculty_id } = sanitizedData!;
 
     const { data, error } = await supabase
       .from('departments')
-      .insert({ name, faculty_id })
+      .insert({ name: sanitizeString(name), faculty_id })
       .select()
       .single();
 

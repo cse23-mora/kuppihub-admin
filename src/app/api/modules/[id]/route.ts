@@ -1,13 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabase from '@/lib/supabase';
+import { verifyAdminToken, createUnauthorizedResponse, rateLimit } from '@/lib/auth';
+import { isValidUUID, sanitizeObject, sanitizeString } from '@/lib/validation';
 
-// GET - Fetch single module
+// GET - Fetch single module (protected)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting
+    const rateLimitResponse = rateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid module ID format' }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('modules')
       .select('*')
@@ -23,18 +41,51 @@ export async function GET(
   }
 }
 
-// PATCH - Update module
+// PATCH - Update module (protected)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting (stricter for writes)
+    const rateLimitResponse = rateLimit(request, 30);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid module ID format' }, { status: 400 });
+    }
+
     const body = await request.json();
+
+    // Sanitize input
+    const sanitizedBody = sanitizeObject(body);
+
+    // Whitelist allowed fields to update
+    const allowedFields = ['code', 'name', 'description', 'semester_id', 'credits'];
+    const filteredBody: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (sanitizedBody[field] !== undefined) {
+        filteredBody[field] = typeof sanitizedBody[field] === 'string' 
+          ? sanitizeString(sanitizedBody[field]) 
+          : sanitizedBody[field];
+      }
+    }
 
     const { data, error } = await supabase
       .from('modules')
-      .update(body)
+      .update({
+        ...filteredBody,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
@@ -48,13 +99,28 @@ export async function PATCH(
   }
 }
 
-// DELETE - Delete module
+// DELETE - Delete module (protected)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limiting (very strict for deletes)
+    const rateLimitResponse = rateLimit(request, 10);
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Authentication
+    const uid = await verifyAdminToken(request);
+    if (!uid) {
+      return createUnauthorizedResponse('Admin authentication required');
+    }
+
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid module ID format' }, { status: 400 });
+    }
     
     // First delete all module assignments
     await supabase
