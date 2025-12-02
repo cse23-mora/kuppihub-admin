@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkIsAdmin = (email: string | null): boolean => {
     if (!email) return false;
     const adminEmails = getAdminEmails();
-    console.log('[Auth] Checking admin status for:', email, 'Admin list:', adminEmails);
+   // console.log('[Auth] Checking admin status for:', email, 'Admin list:', adminEmails);
     return adminEmails.includes(email.toLowerCase());
   };
 
