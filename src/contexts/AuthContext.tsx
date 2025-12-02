@@ -1,10 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { 
   User, 
   onAuthStateChanged, 
-  signInWithRedirect, 
+  signInWithPopup, 
   getRedirectResult,
   signOut as firebaseSignOut 
 } from 'firebase/auth';
@@ -32,6 +32,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Admin emails - can be configured via environment variable
 const getAdminEmails = (): string[] => {
   const envEmails = process.env.NEXT_PUBLIC_ADMIN_EMAILS;
+  console.log('[Auth] Admin emails from env:', envEmails);
   if (envEmails) {
     return envEmails.split(',').map(email => email.trim().toLowerCase());
   }
@@ -42,71 +43,122 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const redirectHandled = useRef(false);
 
   const checkIsAdmin = (email: string | null): boolean => {
     if (!email) return false;
     const adminEmails = getAdminEmails();
+    console.log('[Auth] Checking admin status for:', email, 'Admin list:', adminEmails);
     return adminEmails.includes(email.toLowerCase());
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     // Handle redirect result when returning from Google sign-in
     const handleRedirectResult = async () => {
+      if (redirectHandled.current) return;
+      redirectHandled.current = true;
+      
       try {
+        console.log('[Auth] Checking for redirect result...');
         const result = await getRedirectResult(auth);
         if (result) {
+          console.log('[Auth] Redirect result received:', result.user.email);
           const isAdmin = checkIsAdmin(result.user.email);
           if (!isAdmin) {
+            console.log('[Auth] User is not admin, signing out');
             await firebaseSignOut(auth);
-            setError('Access denied. You are not authorized as an admin.');
-            setUser(null);
+            if (isMounted) {
+              setError('Access denied. You are not authorized as an admin.');
+              setUser(null);
+              setLoading(false);
+            }
           }
+        } else {
+          console.log('[Auth] No redirect result');
         }
       } catch (error) {
-        console.error('Redirect result error:', error);
-        setError('Failed to sign in. Please try again.');
+        console.error('[Auth] Redirect result error:', error);
+        if (isMounted) {
+          setError('Failed to sign in. Please try again.');
+          setLoading(false);
+        }
       }
     };
 
     handleRedirectResult();
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: User | null) => {
+      console.log('[Auth] Auth state changed:', firebaseUser?.email || 'null');
+      
       if (firebaseUser) {
         const isAdmin = checkIsAdmin(firebaseUser.email);
         
         if (!isAdmin) {
           // Not an admin, sign them out
+          console.log('[Auth] User not admin, signing out');
           await firebaseSignOut(auth);
-          setUser(null);
-          setError('Access denied. You are not authorized as an admin.');
+          if (isMounted) {
+            setUser(null);
+            setError('Access denied. You are not authorized as an admin.');
+          }
         } else {
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            isAdmin: true,
-          });
-          setError(null);
+          console.log('[Auth] User is admin, setting user state');
+          if (isMounted) {
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              isAdmin: true,
+            });
+            setError(null);
+          }
         }
       } else {
-        setUser(null);
+        if (isMounted) {
+          setUser(null);
+        }
       }
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = async () => {
     try {
       setError(null);
       setLoading(true);
-      await signInWithRedirect(auth, googleProvider);
-      // The result will be handled in the useEffect when redirected back
+      console.log('[Auth] Starting Google sign-in with popup...');
+      const result = await signInWithPopup(auth, googleProvider);
+      console.log('[Auth] Sign-in successful:', result.user.email);
+      
+      const isAdmin = checkIsAdmin(result.user.email);
+      if (!isAdmin) {
+        console.log('[Auth] User is not admin, signing out');
+        await firebaseSignOut(auth);
+        setError('Access denied. You are not authorized as an admin.');
+        setUser(null);
+        setLoading(false);
+      }
+      // If admin, the onAuthStateChanged listener will handle setting the user
     } catch (error: unknown) {
-      console.error('Sign in error:', error);
-      setError('Failed to sign in. Please try again.');
+      console.error('[Auth] Sign in error:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      if (firebaseError.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in was cancelled. Please try again.');
+      } else if (firebaseError.code === 'auth/popup-blocked') {
+        setError('Popup was blocked. Please allow popups and try again.');
+      } else {
+        setError(`Failed to sign in: ${firebaseError.message || 'Please try again.'}`);
+      }
       setLoading(false);
     }
   };
