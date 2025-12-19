@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, ChangeEvent } from 'react';
+import { useEffect, useState, ChangeEvent, SyntheticEvent } from 'react';
 import {
   Box,
   Typography,
@@ -27,6 +27,7 @@ import {
   MenuItem,
   Alert,
   SelectChangeEvent,
+  Autocomplete,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -82,6 +83,7 @@ export default function HierarchyPage() {
     semester: string;
   } | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<number | ''>('');
+  const [moduleSearchQuery, setModuleSearchQuery] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -326,6 +328,7 @@ export default function HierarchyPage() {
           setAddModuleDialogOpen(false);
           setSelectedModuleId('');
           setSelectedPath(null);
+          setModuleSearchQuery('');
         }}
         maxWidth="sm"
         fullWidth
@@ -340,20 +343,30 @@ export default function HierarchyPage() {
                 {hierarchy[selectedPath.faculty]?.children[selectedPath.department]?.children[selectedPath.semester]?.name}
               </Alert>
             )}
-            <FormControl fullWidth>
-              <InputLabel>Select Module</InputLabel>
-              <Select
-                value={selectedModuleId}
-                label="Select Module"
-                onChange={(e: SelectChangeEvent<number | ''>) => setSelectedModuleId(e.target.value as number | '')}
-              >
-                {getAvailableModules().map((module: Module) => (
-                  <MenuItem key={module.id} value={module.id}>
-                    {module.code} - {module.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              options={getAvailableModules()}
+              getOptionLabel={(option: Module) => `${option.code} - ${option.name}`}
+              value={
+                selectedModuleId
+                  ? getAvailableModules().find((m) => m.id === selectedModuleId) || null
+                  : null
+              }
+              onChange={(event: SyntheticEvent, value: Module | null) => {
+                setSelectedModuleId(value?.id || '');
+              }}
+              inputValue={moduleSearchQuery}
+              onInputChange={(event, value) => {
+                setModuleSearchQuery(value);
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search and Select Module"
+                  placeholder="Type module code or name..."
+                />
+              )}
+              noOptionsText="No available modules"
+            />
           </Box>
         </DialogContent>
         <DialogActions>
@@ -362,6 +375,7 @@ export default function HierarchyPage() {
               setAddModuleDialogOpen(false);
               setSelectedModuleId('');
               setSelectedPath(null);
+              setModuleSearchQuery('');
             }}
           >
             Cancel
